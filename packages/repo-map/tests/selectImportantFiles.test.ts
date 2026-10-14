@@ -137,6 +137,38 @@ describe("selectImportantFiles", () => {
     expect(excludeCount).toBe(1);
   });
 
+  it("keeps scanner-excluded secret files in riskyFiles without token details", () => {
+    const result = makeScanResult([
+      makeFile({ relativePath: ".env", extension: "", estimatedTokens: 420, included: false, excludedReason: "potential secret file", riskFlags: ["secret"] }),
+      makeFile({ relativePath: "backups/prod.sql", extension: ".sql", estimatedTokens: 9000, included: false, excludedReason: "database-dump", riskFlags: ["database-dump"] }),
+      makeFile({ relativePath: "src/index.ts", extension: ".ts" }),
+    ]);
+    const selected = selectImportantFiles(result, { tokenBudget: 8000 });
+
+    const risky = selected.riskyFiles.map((f) => f.relativePath).sort();
+    expect(risky).toEqual([".env", "backups/prod.sql"]);
+    const env = selected.riskyFiles.find((f) => f.relativePath === ".env");
+    expect(env?.estimatedTokens).toBe(0);
+    expect(env?.reason).toBe("potential secret file");
+
+    // Still excluded, never recommended for inclusion.
+    expect(selected.excludedFiles.map((f) => f.relativePath)).toContain(".env");
+    expect(selected.recommendedInclude.map((f) => f.relativePath)).not.toContain(".env");
+    expect(selected.recommendedExclude.filter((f) => f.relativePath === "backups/prod.sql")).toHaveLength(1);
+  });
+
+  it("does not add ordinary excluded files to riskyFiles", () => {
+    const result = makeScanResult([
+      makeFile({ relativePath: "node_modules/foo/index.js", extension: ".js", included: false, excludedReason: "In .gitignore" }),
+      makeFile({ relativePath: "pnpm-lock.yaml", extension: ".yaml", estimatedTokens: 50000, included: false, excludedReason: "lockfile", riskFlags: ["lockfile"] }),
+      makeFile({ relativePath: "dist/app.js", extension: ".js", included: false, excludedReason: "build-output", riskFlags: ["build-output", "large-file"] }),
+    ]);
+    const selected = selectImportantFiles(result, { tokenBudget: 8000 });
+
+    expect(selected.riskyFiles).toHaveLength(0);
+    expect(selected.excludedFiles).toHaveLength(3);
+  });
+
   it("recommends each overlapping file for exclusion only once", () => {
     const result = makeScanResult([
       makeFile({ relativePath: "dist/bundle.min.js", extension: ".js", estimatedTokens: 8000, riskFlags: ["generated"] }),

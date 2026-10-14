@@ -158,6 +158,35 @@ describe("createRepoMap", () => {
     expect(result.recommendedExclude.filter((f) => f.relativePath === "src/vendor.min.js")).toHaveLength(1);
   });
 
+  it("warns about secret files that the scanner excluded", () => {
+    const files: WorkspaceFileInfo[] = [
+      makeFile({ relativePath: "src/index.ts", extension: ".ts", estimatedTokens: 200 }),
+      makeFile({ relativePath: ".env.production", extension: "", estimatedTokens: 300, included: false, excludedReason: "potential secret file", riskFlags: ["secret"] }),
+    ];
+    const scan: WorkspaceScanResult = {
+      rootPath: "/workspace",
+      scannedAt: new Date().toISOString(),
+      totalFiles: files.length,
+      includedFiles: files.filter((f) => f.included).length,
+      excludedFiles: files.filter((f) => !f.included).length,
+      totalBytes: files.reduce((s, f) => s + f.bytes, 0),
+      includedBytes: files.filter((f) => f.included).reduce((s, f) => s + f.bytes, 0),
+      totalEstimatedTokens: files.reduce((s, f) => s + f.estimatedTokens, 0),
+      includedTokens: files.filter((f) => f.included).reduce((s, f) => s + f.estimatedTokens, 0),
+      files,
+      folders: [],
+      languages: [],
+      warnings: [],
+      riskFiles: files.filter((f) => f.riskFlags.length > 0),
+    };
+    const result = createRepoMap(scan, { tokenBudget: 8000 });
+
+    expect(result.riskyFiles.map((f) => f.relativePath)).toEqual([".env.production"]);
+    expect(result.summary).toContain("Risky files: 1");
+    expect(result.agentInstructions.some((line) => line.includes("1 potentially sensitive file(s)"))).toBe(true);
+    expect(result.importantFiles.map((f) => f.relativePath)).not.toContain(".env.production");
+  });
+
   it("handles empty scan result gracefully", () => {
     const scan: WorkspaceScanResult = {
       rootPath: "/empty",

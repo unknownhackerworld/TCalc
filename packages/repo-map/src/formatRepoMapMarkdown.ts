@@ -182,6 +182,11 @@ function appendRiskSensitiveFiles(lines: string[], repoMap: RepoMapResult): void
   lines.push("The following files may contain sensitive information. Contents are not exposed here:");
   lines.push("");
   for (const file of repoMap.riskyFiles) {
+    // Scanner-excluded sensitive files carry no token estimate, so show why they were excluded instead.
+    if (file.estimatedTokens === 0) {
+      lines.push(`- ${markdownCode(file.relativePath)} (excluded from scan: ${escapeMarkdownText(file.reason)})`);
+      continue;
+    }
     lines.push(`- ${markdownCode(file.relativePath)} — ~${file.estimatedTokens.toLocaleString()} tokens`);
   }
   lines.push("");

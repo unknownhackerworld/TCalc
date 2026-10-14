@@ -154,6 +154,15 @@ function getLanguage(extension: string): string | undefined {
   return langMap[extension];
 }
 
+// Risk flags that mean the file content itself may be sensitive. Other flags such as
+// "generated", "lockfile" or "build-output" only describe token cost, so an excluded file
+// carrying just those is not a risk warning.
+const SENSITIVE_RISK_FLAGS = new Set(["secret", "database-dump"]);
+
+function isSensitiveExclusion(riskFlags: readonly string[]): boolean {
+  return riskFlags.some((flag) => SENSITIVE_RISK_FLAGS.has(flag));
+}
+
 export function selectImportantFiles(
   scanResult: WorkspaceScanResult,
   options: RepoMapOptions,
@@ -239,6 +248,19 @@ export function selectImportantFiles(
     // guidance, so generated files stay listed here whether or not their tokens are counted.
     if (isGeneratedEntry(rp, file.extension, file.riskFlags)) {
       generatedFiles.push(repoFile);
+    }
+
+    // The scanner excludes secret files on purpose, so this is where most of them end up.
+    // Keep them in the risk warning, but list only the path and reason: no token estimate,
+    // because the size of a credentials file is itself a detail we should not publish.
+    if (isSensitiveExclusion(file.riskFlags)) {
+      riskyFiles.push({
+        relativePath: rp,
+        language: getLanguage(file.extension),
+        estimatedTokens: 0,
+        reason: file.excludedReason ?? "Excluded as risk-sensitive",
+        priority: 0,
+      });
     }
   }
 

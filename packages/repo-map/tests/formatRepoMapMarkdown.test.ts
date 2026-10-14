@@ -172,6 +172,20 @@ describe("formatRepoMapMarkdown", () => {
     expect(md).toContain("No risk-flagged files detected.");
   });
 
+  it("lists scanner-excluded sensitive files by path and reason only", () => {
+    const repoMap = makeFixtureRepoMap();
+    repoMap.riskyFiles = [
+      makeFile(".env", 10, 5, "Low-priority"),
+      makeFile(".env.production", 0, 0, "potential secret file"),
+    ];
+    const md = formatRepoMapMarkdown(repoMap);
+
+    expect(md).not.toContain("No risk-flagged files detected.");
+    expect(md).toContain("`.env.production` (excluded from scan: potential secret file)");
+    expect(md).not.toMatch(/\.env\.production` .*tokens/);
+    expect(md).toMatch(/`\.env` .*~5 tokens/);
+  });
+
   it("includes overflow notes when present", () => {
     const repoMap = makeFixtureRepoMap();
     repoMap.overflowNotes = ["Budget of 2,000 tokens exceeded. Trimmed 1 lower-priority file(s) to fit."];
